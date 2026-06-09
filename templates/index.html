@@ -1,0 +1,743 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Symbol Search -->
+<div class="mb-6">
+    <div class="flex items-center gap-4">
+        <div class="relative flex-1 max-w-md">
+            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"></i>
+            <input 
+                type="text" 
+                id="symbol-input" 
+                placeholder="Enter symbol (e.g., NVDA, SPY, GDX)"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                maxlength="5"
+            >
+        </div>
+        <button onclick="analyzeSymbol()" class="btn-primary px-6 py-2 rounded-lg font-medium flex items-center gap-2">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+            Analyze
+        </button>
+        <button onclick="loadPortfolio()" class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors">
+            <i data-lucide="briefcase" class="w-4 h-4"></i>
+            Portfolio
+        </button>
+    </div>
+</div>
+
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-12 gap-6">
+    <!-- Left Column - Portfolio & Positions -->
+    <div class="col-span-3 space-y-4">
+        <!-- Portfolio Summary -->
+        <div class="card p-4">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="pie-chart" class="w-5 h-5 text-blue-400"></i>
+                Portfolio Summary
+            </h3>
+            <div id="portfolio-summary" class="space-y-3">
+                <div class="metric-box p-3 rounded-lg">
+                    <div class="text-sm text-gray-400">Stock P&L</div>
+                    <div id="total-stock-pnl" class="text-xl font-mono font-bold">--</div>
+                </div>
+                <div class="metric-box p-3 rounded-lg">
+                    <div class="text-sm text-gray-400">Option P&L</div>
+                    <div id="total-option-pnl" class="text-xl font-mono font-bold">--</div>
+                </div>
+                <div class="metric-box p-3 rounded-lg">
+                    <div class="text-sm text-gray-400">Premium Collected</div>
+                    <div id="total-premium" class="text-xl font-mono font-bold text-green-400">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Positions List -->
+        <div class="card p-4">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="list" class="w-5 h-5 text-blue-400"></i>
+                Positions
+            </h3>
+            <div id="positions-list" class="space-y-2 max-h-96 overflow-y-auto">
+                <div class="text-gray-500 text-sm text-center py-4">No positions loaded</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Middle Column - Main Visualization -->
+    <div class="col-span-6 space-y-4">
+        <!-- Position Analysis Card -->
+        <div class="card p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="analysis-symbol" class="text-xl font-bold flex items-center gap-2">
+                    <i data-lucide="bar-chart-2" class="w-6 h-6 text-blue-400"></i>
+                    <span>Select a symbol</span>
+                </h3>
+                <div id="position-state" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-700">
+                    --
+                </div>
+            </div>
+            
+            <!-- Position Chart -->
+            <div id="position-chart" class="chart-container h-80">
+                <div class="flex items-center justify-center h-full text-gray-500">
+                    Enter a symbol to view position analysis
+                </div>
+            </div>
+            
+            <!-- Position Metrics -->
+            <div id="position-metrics" class="grid grid-cols-4 gap-4 mt-4 hidden">
+                <div class="metric-box p-3 rounded-lg text-center">
+                    <div class="text-sm text-gray-400">Shares</div>
+                    <div id="metric-shares" class="text-lg font-mono font-bold">--</div>
+                </div>
+                <div class="metric-box p-3 rounded-lg text-center">
+                    <div class="text-sm text-gray-400">Cost Basis</div>
+                    <div id="metric-cost-basis" class="text-lg font-mono font-bold">--</div>
+                </div>
+                <div class="metric-box p-3 rounded-lg text-center">
+                    <div class="text-sm text-gray-400">Stock P&L</div>
+                    <div id="metric-stock-pnl" class="text-lg font-mono font-bold">--</div>
+                </div>
+                <div class="metric-box p-3 rounded-lg text-center">
+                    <div class="text-sm text-gray-400">Option Delta</div>
+                    <div id="metric-option-delta" class="text-lg font-mono font-bold">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Option Chain -->
+        <div class="card p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center gap-2">
+                    <i data-lucide="grid" class="w-5 h-5 text-blue-400"></i>
+                    Option Chain
+                </h3>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-gray-400">Target Delta:</label>
+                    <input 
+                        type="number" 
+                        id="target-delta" 
+                        value="0.30" 
+                        step="0.05" 
+                        min="0.05" 
+                        max="0.50"
+                        class="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm"
+                    >
+                    <button onclick="resolveOptions()" class="bg-blue-600 hover:bg-blue-500 px-4 py-1 rounded text-sm font-medium">
+                        Resolve
+                    </button>
+                </div>
+            </div>
+            
+            <div id="option-chain-container" class="space-y-3">
+                <div class="text-gray-500 text-sm text-center py-4">
+                    Click "Resolve" to load options for the selected symbol
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Column - Recommendations & Actions -->
+    <div class="col-span-3 space-y-4">
+        <!-- Recommendations -->
+        <div class="card p-4">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="lightbulb" class="w-5 h-5 text-yellow-400"></i>
+                Recommendations
+            </h3>
+            <div id="recommendations-list" class="space-y-3">
+                <div class="text-gray-500 text-sm text-center py-4">
+                    Analyze a symbol to see trade recommendations
+                </div>
+            </div>
+        </div>
+        
+        <!-- Scenario Analysis -->
+        <div class="card p-4">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="calculator" class="w-5 h-5 text-purple-400"></i>
+                Scenario Analysis
+            </h3>
+            <div id="scenario-analysis" class="space-y-3">
+                <div class="text-gray-500 text-sm text-center py-4">
+                    Select a recommendation to see scenario analysis
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="card p-4">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="zap" class="w-5 h-5 text-orange-400"></i>
+                Quick Actions
+            </h3>
+            <div class="space-y-2">
+                <button onclick="sellCall()" class="w-full bg-green-600/20 hover:bg-green-600/30 border border-green-600/50 text-green-400 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" disabled id="btn-sell-call">
+                    Sell Covered Call
+                </button>
+                <button onclick="sellPut()" class="w-full bg-red-600/20 hover:bg-red-600/30 border border-red-600/50 text-red-400 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" disabled id="btn-sell-put">
+                    Sell Cash-Secured Put
+                </button>
+                <button onclick="refreshData()" class="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm font-medium transition-colors">
+                    Refresh Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trade Modal -->
+<div id="trade-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <h3 class="text-lg font-bold mb-4">Confirm Trade</h3>
+        <div id="trade-details" class="space-y-2 mb-6 text-sm">
+            <!-- Populated by JS -->
+        </div>
+        <div class="flex gap-3">
+            <button onclick="closeTradeModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium">
+                Cancel
+            </button>
+            <button onclick="confirmTrade()" class="flex-1 btn-primary py-2 rounded-lg font-medium">
+                Confirm
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+// Current state
+let currentSymbol = null;
+let currentAnalysis = null;
+let selectedCall = null;
+let selectedPut = null;
+let pendingTrade = null;
+
+// Analyze symbol
+async function analyzeSymbol() {
+    const symbol = document.getElementById('symbol-input').value.toUpperCase().trim();
+    if (!symbol) return;
+    
+    currentSymbol = symbol;
+    window.AppState.selectedSymbol = symbol;
+    
+    // Update UI
+    document.getElementById('analysis-symbol').innerHTML = `
+        <i data-lucide="bar-chart-2" class="w-6 h-6 text-blue-400"></i>
+        <span>${symbol}</span>
+    `;
+    lucide.createIcons();
+    
+    // Load analysis
+    await loadPositionAnalysis(symbol);
+    await loadRecommendations(symbol);
+    await resolveOptions();
+}
+
+// Load position analysis
+async function loadPositionAnalysis(symbol) {
+    try {
+        const response = await fetch(`/api/wheel/analyze/${symbol}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('Analysis error:', data.error);
+            return;
+        }
+        
+        currentAnalysis = data;
+        
+        // Update state badge
+        const stateEl = document.getElementById('position-state');
+        stateEl.textContent = data.state.replace(/_/g, ' ').toUpperCase();
+        
+        // Update metrics
+        document.getElementById('position-metrics').classList.remove('hidden');
+        document.getElementById('metric-shares').textContent = data.shares_owned || '0';
+        document.getElementById('metric-cost-basis').textContent = formatCurrency(data.cost_basis);
+        
+        const stockPnlEl = document.getElementById('metric-stock-pnl');
+        stockPnlEl.textContent = formatCurrency(data.stock_pnl);
+        stockPnlEl.className = `text-lg font-mono font-bold ${getStatusColor(data.stock_pnl)}`;
+        
+        document.getElementById('metric-option-delta').textContent = 
+            data.option_delta ? formatPercent(data.option_delta) : '--';
+        
+        // Update buttons
+        document.getElementById('btn-sell-call').disabled = data.shares_owned < 100;
+        document.getElementById('btn-sell-put').disabled = false;
+        
+        // Render chart
+        renderPositionChart(data);
+        
+    } catch (e) {
+        console.error('Failed to load analysis:', e);
+    }
+}
+
+// Render position chart
+function renderPositionChart(data) {
+    const chartEl = document.getElementById('position-chart');
+    
+    const costBasis = data.cost_basis || 0;
+    const currentPrice = data.current_price || costBasis;
+    const range = costBasis * 0.20; // +/- 20%
+    
+    // Determine bar color
+    let barColor = '#f97316'; // orange (at/near cost)
+    if (currentPrice > costBasis * 1.005) {
+        barColor = '#22c55e'; // green (above)
+    } else if (currentPrice < costBasis * 0.995) {
+        barColor = '#ef4444'; // red (below)
+    }
+    
+    // Build annotations for strikes
+    const annotations = [];
+    
+    if (selectedCall) {
+        annotations.push({
+            x: 0.5, y: selectedCall.strike,
+            xref: 'paper', yref: 'y',
+            text: `Call Strike: $${selectedCall.strike}`,
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#22c55e',
+            font: { color: '#22c55e', size: 12 }
+        });
+    }
+    
+    if (selectedPut) {
+        annotations.push({
+            x: 0.5, y: selectedPut.strike,
+            xref: 'paper', yref: 'y',
+            text: `Put Strike: $${selectedPut.strike}`,
+            showarrow: true,
+            arrowhead: 2,
+            arrowcolor: '#ef4444',
+            font: { color: '#ef4444', size: 12 }
+        });
+    }
+    
+    const trace = {
+        x: [data.symbol || 'Position'],
+        y: [currentPrice],
+        type: 'bar',
+        marker: {
+            color: barColor,
+            width: 0.5
+        },
+        width: 0.5,
+        hovertemplate: 'Spot: $%{y:.2f}<extra></extra>'
+    };
+    
+    const layout = {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { color: '#e0e0e0' },
+        margin: { t: 30, b: 30, l: 60, r: 20 },
+        yaxis: {
+            title: 'Price ($)',
+            range: [costBasis - range, costBasis + range],
+            gridcolor: '#2a2a3a',
+            zerolinecolor: '#2a2a3a'
+        },
+        xaxis: {
+            showgrid: false
+        },
+        shapes: [
+            // Cost basis line
+            {
+                type: 'line',
+                x0: -0.5, x1: 0.5,
+                y0: costBasis, y1: costBasis,
+                line: { color: '#3b82f6', width: 3, dash: 'dash' }
+            },
+            // Selected call strike
+            ...(selectedCall ? [{
+                type: 'line',
+                x0: -0.5, x1: 0.5,
+                y0: selectedCall.strike, y1: selectedCall.strike,
+                line: { color: '#22c55e', width: 2 }
+            }] : []),
+            // Selected put strike
+            ...(selectedPut ? [{
+                type: 'line',
+                x0: -0.5, x1: 0.5,
+                y0: selectedPut.strike, y1: selectedPut.strike,
+                line: { color: '#ef4444', width: 2 }
+            }] : [])
+        ],
+        annotations: [
+            {
+                x: 0.5, y: costBasis,
+                xref: 'paper', yref: 'y',
+                text: `Cost Basis: $${costBasis.toFixed(2)}`,
+                showarrow: false,
+                font: { color: '#3b82f6', size: 12 },
+                yshift: 15
+            },
+            ...annotations
+        ],
+        showlegend: false
+    };
+    
+    Plotly.newPlot('position-chart', [trace], layout, {responsive: true, displayModeBar: false});
+}
+
+// Load recommendations
+async function loadRecommendations(symbol) {
+    try {
+        const response = await fetch(`/api/wheel/recommendations/${symbol}`);
+        const data = await response.json();
+        
+        const container = document.getElementById('recommendations-list');
+        
+        if (!data.recommendations || data.recommendations.length === 0) {
+            container.innerHTML = `
+                <div class="text-gray-500 text-sm text-center py-4">
+                    No recommendations available for current position state
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = data.recommendations.map((rec, i) => `
+            <div class="metric-box p-3 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors" onclick="selectRecommendation(${i})">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-semibold ${rec.action.includes('call') ? 'text-green-400' : 'text-red-400'}">
+                        ${rec.action.replace(/_/g, ' ').toUpperCase()}
+                    </span>
+                    <span class="text-sm text-gray-400">${rec.option.expiration?.split('T')[0] || 'Unknown'}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                        <span class="text-gray-500">Strike:</span>
+                        <span class="font-mono">$${rec.option.strike}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Delta:</span>
+                        <span class="font-mono">${formatPercent(rec.option.delta)}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Premium:</span>
+                        <span class="font-mono text-green-400">$${rec.expected_premium.toFixed(2)}</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-500">Max Profit:</span>
+                        <span class="font-mono">$${rec.max_profit.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div class="mt-2 text-xs text-gray-400">${rec.reasoning}</div>
+            </div>
+        `).join('');
+        
+    } catch (e) {
+        console.error('Failed to load recommendations:', e);
+    }
+}
+
+// Resolve options
+async function resolveOptions() {
+    if (!currentSymbol) return;
+    
+    const targetDelta = parseFloat(document.getElementById('target-delta').value) || 0.30;
+    
+    try {
+        const response = await fetch(
+            `/api/options/chain/${currentSymbol}?delta=${targetDelta}&maturities=3&type=both`
+        );
+        const data = await response.json();
+        
+        if (data.error) {
+            console.error('Option chain error:', data.error);
+            return;
+        }
+        
+        const container = document.getElementById('option-chain-container');
+        
+        let html = '';
+        for (const [expiry, options] of Object.entries(data)) {
+            html += `
+                <div class="border border-gray-700 rounded-lg p-3">
+                    <div class="text-sm font-semibold text-blue-400 mb-2">${expiry}</div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-xs text-green-400 font-medium mb-1">CALLS</div>
+                            ${options.calls.map((c, i) => `
+                                <div class="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-700 cursor-pointer ${selectedCall?.symbol === c.symbol ? 'bg-green-900/30' : ''}" 
+                                     onclick="selectCall('${expiry}', ${i})">
+                                    <span class="font-mono text-sm">$${c.strike}</span>
+                                    <span class="text-xs text-gray-400">${formatPercent(c.delta)}</span>
+                                    <span class="text-xs text-green-400">$${c.premium?.toFixed(2) || '--'}</span>
+                                </div>
+                            `).join('') || '<div class="text-xs text-gray-500">No calls</div>'}
+                        </div>
+                        <div>
+                            <div class="text-xs text-red-400 font-medium mb-1">PUTS</div>
+                            ${options.puts.map((p, i) => `
+                                <div class="flex items-center justify-between py-1 px-2 rounded hover:bg-gray-700 cursor-pointer ${selectedPut?.symbol === p.symbol ? 'bg-red-900/30' : ''}"
+                                     onclick="selectPut('${expiry}', ${i})">
+                                    <span class="font-mono text-sm">$${p.strike}</span>
+                                    <span class="text-xs text-gray-400">${formatPercent(Math.abs(p.delta))}</span>
+                                    <span class="text-xs text-red-400">$${p.premium?.toFixed(2) || '--'}</span>
+                                </div>
+                            `).join('') || '<div class="text-xs text-gray-500">No puts</div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html || '<div class="text-gray-500 text-sm text-center">No options found</div>';
+        
+        // Store options for selection
+        container.dataset.options = JSON.stringify(data);
+        
+    } catch (e) {
+        console.error('Failed to resolve options:', e);
+    }
+}
+
+// Select call
+function selectCall(expiry, index) {
+    const data = JSON.parse(document.getElementById('option-chain-container').dataset.options || '{}');
+    if (data[expiry]?.calls?.[index]) {
+        selectedCall = data[expiry].calls[index];
+        resolveOptions(); // Re-render to show selection
+        if (currentAnalysis) renderPositionChart(currentAnalysis);
+        updateScenarioAnalysis();
+    }
+}
+
+// Select put
+function selectPut(expiry, index) {
+    const data = JSON.parse(document.getElementById('option-chain-container').dataset.options || '{}');
+    if (data[expiry]?.puts?.[index]) {
+        selectedPut = data[expiry].puts[index];
+        resolveOptions(); // Re-render to show selection
+        if (currentAnalysis) renderPositionChart(currentAnalysis);
+        updateScenarioAnalysis();
+    }
+}
+
+// Update scenario analysis
+function updateScenarioAnalysis() {
+    const container = document.getElementById('scenario-analysis');
+    
+    if (!selectedCall && !selectedPut) {
+        container.innerHTML = '<div class="text-gray-500 text-sm text-center">Select options to see scenario analysis</div>';
+        return;
+    }
+    
+    let html = '';
+    
+    if (selectedCall && currentAnalysis) {
+        const stockPnl = (selectedCall.strike - currentAnalysis.cost_basis) * (currentAnalysis.shares_owned || 0);
+        const totalPnl = stockPnl + (selectedCall.premium || 0) * 100;
+        
+        html += `
+            <div class="metric-box p-3 rounded-lg border-l-4 border-green-500">
+                <div class="font-semibold text-green-400 mb-2">Covered Call Scenario</div>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Call Premium:</span>
+                        <span class="font-mono">$${((selectedCall.premium || 0) * 100).toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Stock P&L if Assigned:</span>
+                        <span class="font-mono ${getStatusColor(stockPnl)}">$${stockPnl.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Total P&L if Assigned:</span>
+                        <span class="font-mono ${getStatusColor(totalPnl)}">$${totalPnl.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Assignment Probability:</span>
+                        <span class="font-mono">${formatPercent(selectedCall.delta)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (selectedPut) {
+        const cashRequired = (selectedPut.strike || 0) * 100;
+        const newCostBasis = selectedPut.strike - (selectedPut.premium || 0);
+        
+        html += `
+            <div class="metric-box p-3 rounded-lg border-l-4 border-red-500">
+                <div class="font-semibold text-red-400 mb-2">Cash-Secured Put Scenario</div>
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Put Premium:</span>
+                        <span class="font-mono">$${((selectedPut.premium || 0) * 100).toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Cash Required:</span>
+                        <span class="font-mono">$${cashRequired.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">New Cost Basis:</span>
+                        <span class="font-mono">$${newCostBasis.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Assignment Probability:</span>
+                        <span class="font-mono">${formatPercent(Math.abs(selectedPut.delta || 0))}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// Load portfolio
+async function loadPortfolio() {
+    try {
+        const response = await fetch('/api/wheel/status');
+        const data = await response.json();
+        
+        // Update summary
+        document.getElementById('total-stock-pnl').textContent = formatCurrency(data.summary.total_stock_pnl);
+        document.getElementById('total-option-pnl').textContent = formatCurrency(data.summary.total_option_pnl);
+        document.getElementById('total-premium').textContent = formatCurrency(data.summary.total_premium_collected);
+        
+        // Update positions list
+        const container = document.getElementById('positions-list');
+        if (!data.positions || data.positions.length === 0) {
+            container.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No active positions</div>';
+            return;
+        }
+        
+        container.innerHTML = data.positions.map(p => `
+            <div class="metric-box p-3 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors" onclick="selectSymbol('${p.symbol}')">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold">${p.symbol}</span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-gray-700">${p.state.replace(/_/g, ' ')}</span>
+                </div>
+                <div class="text-sm text-gray-400">
+                    ${p.shares_owned > 0 ? `${p.shares_owned} shares @ $${p.cost_basis.toFixed(2)}` : 'No stock position'}
+                </div>
+                <div class="text-sm ${getStatusColor(p.stock_pnl)}">
+                    Stock P&L: ${formatCurrency(p.stock_pnl)}
+                </div>
+            </div>
+        `).join('');
+        
+        document.getElementById('position-count').textContent = data.positions.length;
+        
+    } catch (e) {
+        console.error('Failed to load portfolio:', e);
+    }
+}
+
+// Select symbol from portfolio
+function selectSymbol(symbol) {
+    document.getElementById('symbol-input').value = symbol;
+    analyzeSymbol();
+}
+
+// Sell call action
+function sellCall() {
+    if (!selectedCall || !currentSymbol) return;
+    
+    pendingTrade = {
+        symbol: currentSymbol,
+        action: 'SellToOpen',
+        option_symbol: selectedCall.symbol,
+        quantity: Math.floor((currentAnalysis?.shares_owned || 0) / 100) || 1,
+        price: selectedCall.bid,
+        description: `Sell ${selectedCall.option_type} ${selectedCall.strike} ${selectedCall.expiration}`
+    };
+    
+    showTradeModal(pendingTrade);
+}
+
+// Sell put action
+function sellPut() {
+    if (!selectedPut || !currentSymbol) return;
+    
+    pendingTrade = {
+        symbol: currentSymbol,
+        action: 'SellToOpen',
+        option_symbol: selectedPut.symbol,
+        quantity: 1,
+        price: selectedPut.bid,
+        description: `Sell ${selectedPut.option_type} ${selectedPut.strike} ${selectedPut.expiration}`
+    };
+    
+    showTradeModal(pendingTrade);
+}
+
+// Show trade modal
+function showTradeModal(trade) {
+    const modal = document.getElementById('trade-modal');
+    const details = document.getElementById('trade-details');
+    
+    details.innerHTML = `
+        <div><strong>Action:</strong> ${trade.action}</div>
+        <div><strong>Symbol:</strong> ${trade.option_symbol}</div>
+        <div><strong>Quantity:</strong> ${trade.quantity} contracts</div>
+        <div><strong>Limit Price:</strong> $${trade.price?.toFixed(2) || 'MARKET'}</div>
+        <div><strong>Expected Credit:</strong> $${((trade.price || 0) * trade.quantity * 100).toFixed(2)}</div>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// Close trade modal
+function closeTradeModal() {
+    const modal = document.getElementById('trade-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    pendingTrade = null;
+}
+
+// Confirm trade
+async function confirmTrade() {
+    if (!pendingTrade) return;
+    
+    try {
+        const response = await fetch('/api/trade/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pendingTrade)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            alert(`Trade executed! Order ID: ${result.order_id}`);
+            closeTradeModal();
+            refreshData();
+        } else {
+            alert(`Trade failed: ${result.error}`);
+        }
+        
+    } catch (e) {
+        console.error('Trade error:', e);
+        alert('Failed to execute trade');
+    }
+}
+
+// Refresh data
+async function refreshData() {
+    if (currentSymbol) {
+        await loadPositionAnalysis(currentSymbol);
+        await loadRecommendations(currentSymbol);
+    }
+    await loadPortfolio();
+}
+
+// Handle Enter key in symbol input
+document.getElementById('symbol-input')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        analyzeSymbol();
+    }
+});
+
+// Initial load
+loadPortfolio();
+{% endblock %}

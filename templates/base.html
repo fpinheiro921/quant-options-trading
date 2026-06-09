@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quant Options Trading System - Wheel Strategy</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Plotly for charts -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a25;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888888;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-blue: #3b82f6;
+            --border-color: #2a2a3a;
+        }
+        
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        
+        .chart-container {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .metric-box {
+            background: linear-gradient(135deg, var(--bg-card), var(--bg-secondary));
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            transition: all 0.2s;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .status-green { color: var(--accent-green); }
+        .status-red { color: var(--accent-red); }
+        .status-orange { color: var(--accent-orange); }
+        .status-blue { color: var(--accent-blue); }
+        
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="trending-up" class="w-8 h-8 text-blue-500"></i>
+                    <span class="text-xl font-bold">Quant Wheel System</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-400">Account:</span>
+                        <span id="account-balance" class="font-mono text-green-400">--</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm">
+                        <span class="text-gray-400">Positions:</span>
+                        <span id="position-count" class="font-mono">--</span>
+                    </div>
+                    <div id="connection-status" class="flex items-center gap-2 text-sm">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span class="text-green-400">Connected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {% block content %}{% endblock %}
+    </main>
+    
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Global state
+        window.AppState = {
+            selectedSymbol: null,
+            positions: [],
+            accountInfo: null
+        };
+        
+        // Initialize Socket.IO
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            document.getElementById('connection-status').innerHTML = 
+                '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-green-400">Connected</span>';
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            document.getElementById('connection-status').innerHTML = 
+                '<span class="w-2 h-2 rounded-full bg-red-500"></span><span class="text-red-400">Disconnected</span>';
+        });
+        
+        // Utility functions
+        function formatCurrency(value) {
+            if (value === null || value === undefined) return '--';
+            const num = Number(value);
+            const prefix = num >= 0 ? '$' : '-$';
+            return prefix + Math.abs(num).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+        
+        function formatPercent(value) {
+            if (value === null || value === undefined) return '--';
+            return (value * 100).toFixed(2) + '%';
+        }
+        
+        function getStatusColor(value) {
+            if (value > 0) return 'status-green';
+            if (value < 0) return 'status-red';
+            return 'status-orange';
+        }
+        
+        // Fetch account info
+        async function fetchAccountInfo() {
+            try {
+                const response = await fetch('/api/account');
+                const data = await response.json();
+                if (!data.error) {
+                    document.getElementById('account-balance').textContent = 
+                        formatCurrency(data.cash_available);
+                }
+            } catch (e) {
+                console.error('Failed to fetch account info:', e);
+            }
+        }
+        
+        // Initial load
+        fetchAccountInfo();
+        setInterval(fetchAccountInfo, 30000); // Refresh every 30s
+        
+        {% block extra_js %}{% endblock %}
+    </script>
+</body>
+</html>
